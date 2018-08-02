@@ -17,6 +17,7 @@ from gentle.util.cyst import Insist
 
 import gentle
 
+
 class TranscriptionStatus(Resource):
     def __init__(self, status_dict):
         self.status_dict = status_dict
@@ -25,6 +26,7 @@ class TranscriptionStatus(Resource):
     def render_GET(self, req):
         req.setHeader(b"Content-Type", "application/json")
         return json.dumps(self.status_dict).encode()
+
 
 class Transcriber():
     def __init__(self, data_dir, nthreads=4, ntranscriptionthreads=2):
@@ -79,7 +81,7 @@ class Transcriber():
                 json.dump(status, jsfile, indent=2)
             return
 
-        #XXX: Maybe we should pass this wave object instead of the
+        # XXX: Maybe we should pass this wave object instead of the
         # file path to align_progress
         wav_obj = wave.open(wavfile, 'rb')
         status['duration'] = wav_obj.getnframes() / float(wav_obj.getframerate())
@@ -87,7 +89,7 @@ class Transcriber():
 
         def on_progress(p):
             print(p)
-            for k,v in p.items():
+            for k, v in p.items():
                 status[k] = v
 
         if len(transcript.strip()) > 0:
@@ -96,7 +98,7 @@ class Transcriber():
             trans = self.full_transcriber
         else:
             status['status'] = 'ERROR'
-            status['error']  = 'No transcript provided and no language model for full transcription'
+            status['error'] = 'No transcript provided and no language model for full transcription'
             return
 
         output = trans.transcribe(wavfile, progress_cb=on_progress, logging=logging)
@@ -112,7 +114,7 @@ class Transcriber():
 
         # Inline the alignment into the index.html file.
         htmltxt = open(get_resource('www/view_alignment.html')).read()
-        htmltxt = htmltxt.replace("var INLINE_JSON;", "var INLINE_JSON=%s;" % (output.to_json()));
+        htmltxt = htmltxt.replace("var INLINE_JSON;", "var INLINE_JSON=%s;" % (output.to_json(uid=uid)))
         open(os.path.join(outdir, 'index.html'), 'w').write(htmltxt)
 
         status['status'] = 'OK'
@@ -120,6 +122,7 @@ class Transcriber():
         logging.info('done with transcription.')
 
         return output
+
 
 class TranscriptionsController(Resource):
     def __init__(self, transcriber):
@@ -171,10 +174,12 @@ class TranscriptionsController(Resource):
             def write_result(result):
                 '''Write JSON to client on completion'''
                 req.setHeader("Content-Type", "application/json")
-                req.write(result.to_json(indent=2).encode())
+                req.setHeader("X-Transcription-Id", uid)
+                req.write(result.to_json(uid=uid, indent=2).encode())
                 req.finish()
+
             result_promise.addCallback(write_result)
-            result_promise.addErrback(lambda _: None) # ignore errors
+            result_promise.addErrback(lambda _: None)  # ignore errors
 
             req.notifyFinish().addErrback(lambda _: result_promise.cancel())
 
@@ -184,6 +189,7 @@ class TranscriptionsController(Resource):
         req.setHeader(b"Location", "/transcriptions/%s" % (uid))
         return b''
 
+
 class LazyZipper(Insist):
     def __init__(self, cachedir, transcriber, uid):
         self.transcriber = transcriber
@@ -191,9 +197,10 @@ class LazyZipper(Insist):
         Insist.__init__(self, os.path.join(cachedir, '%s.zip' % (uid)))
 
     def serialize_computation(self, outpath):
-        shutil.make_archive('.'.join(outpath.split('.')[:-1]), # We need to strip the ".zip" from the end
-                            "zip",                             # ...because `shutil.make_archive` adds it back
+        shutil.make_archive('.'.join(outpath.split('.')[:-1]),  # We need to strip the ".zip" from the end
+                            "zip",  # ...because `shutil.make_archive` adds it back
                             os.path.join(self.transcriber.out_dir(self.uid)))
+
 
 class TranscriptionZipper(Resource):
     def __init__(self, cachedir, transcriber):
@@ -216,7 +223,9 @@ class TranscriptionZipper(Resource):
         else:
             return Resource.getChild(self, path, req)
 
-def serve(port=8765, interface='0.0.0.0', installSignalHandlers=0, nthreads=4, ntranscriptionthreads=2, data_dir=get_datadir('webdata')):
+
+def serve(port=8765, interface='0.0.0.0', installSignalHandlers=0, nthreads=4, ntranscriptionthreads=2,
+          data_dir=get_datadir('webdata')):
     logging.info("SERVE %d, %s, %d", port, interface, installSignalHandlers)
 
     if not os.path.exists(data_dir):
@@ -247,13 +256,13 @@ def serve(port=8765, interface='0.0.0.0', installSignalHandlers=0, nthreads=4, n
     reactor.run(installSignalHandlers=installSignalHandlers)
 
 
-if __name__=='__main__':
+if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser(
         description='Align a transcript to audio by generating a new language model.')
     parser.add_argument('--host', default="0.0.0.0",
-                       help='host to run http server on')
+                        help='host to run http server on')
     parser.add_argument('--port', default=8765, type=int,
                         help='port number to run http server on')
     parser.add_argument('--nthreads', default=multiprocessing.cpu_count(), type=int,
@@ -271,4 +280,5 @@ if __name__=='__main__':
     logging.info('gentle %s' % (gentle.__version__))
     logging.info('listening at %s:%d\n' % (args.host, args.port))
 
-    serve(args.port, args.host, nthreads=args.nthreads, ntranscriptionthreads=args.ntranscriptionthreads, installSignalHandlers=1)
+    serve(args.port, args.host, nthreads=args.nthreads, ntranscriptionthreads=args.ntranscriptionthreads,
+          installSignalHandlers=1)

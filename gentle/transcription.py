@@ -78,7 +78,7 @@ class Transcription:
     def __eq__(self, other):
         return self.transcript == other.transcript and self.words == other.words
 
-    def to_json(self, **kwargs):
+    def to_json(self, uid=None, **kwargs):
         '''Return a JSON representation of the aligned transcript'''
         options = {
                 'sort_keys':    True,
@@ -88,6 +88,8 @@ class Transcription:
         options.update(kwargs)
 
         container = {}
+        if uid:
+            container['uid'] = uid
         if self.transcript:
             container['transcript'] = self.transcript
         if self.words: 
